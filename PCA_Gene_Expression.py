@@ -1,139 +1,211 @@
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Taking input from user
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
-rows = int(input("Enter number of samples: "))
-cols = int(input("Enter number of features: "))
+class_file = "class.tsv"
+expr_file = "filtered.tsv.gz"
+columns_file = "columns.tsv.gz"
 
-print("\nEnter dataset values row-wise:")
-
-data = []
-
-for i in range(rows):
-
-    row = list(map(float, input().split()))
-
-    data.append(row)
-
-data = np.array(data)
-
-# Standardization
-mean = data.mean(axis=0)
-std = data.std(axis=0)
-
-standardized_data = (data - mean) / std
-
-# Covariance Matrix
-covariance_matrix = np.cov(standardized_data.T)
-
-# Eigenvalues and Eigenvectors
-
-eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)
-
-# Sorting Eigenvalues
-sorted_index = np.argsort(eigenvalues)[::-1]
-
-sorted_eigenvalues = eigenvalues[sorted_index]
-sorted_eigenvectors = eigenvectors[:, sorted_index]
-
-# Select number of components
-k = int(input("\nEnter number of principal components: "))
-
-principal_components = sorted_eigenvectors[:, :k]
-
-# Display Eigenvalues
-
-print("\n" + "=" * 40)
-print("        EIGENVALUES (sorted)")
-print("=" * 40)
-
-for i in range(len(sorted_eigenvalues)):
-
-    value = sorted_eigenvalues[i]
-
-    bar = "█" * int(value * 10)
-
-    print(f"PC{i+1}  |  {value:.4f}  {bar}")
-
-print("=" * 40)
-print(f"Total variance: {sorted_eigenvalues.sum():.4f}")
-
-# PCA Projection
-reduced_data = standardized_data @ principal_components
-
-# Variance Explained
-variance_explained = (
-    sorted_eigenvalues / sorted_eigenvalues.sum()
-) * 100
-
-print("\nVARIANCE EXPLAINED")
-print("-" * 40)
-
-for i in range(len(variance_explained)):
-
-    print(f"PC{i+1} explains: {variance_explained[i]:.1f}%")
-
-print(f"\nTotal variance by top {k} PCs: "
-      f"{variance_explained[:k].sum():.1f}%")
-
-# Plotting
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-
-
-# Scree Plot
-component_names = [
-    f"PC{i+1}" for i in range(len(sorted_eigenvalues))
-]
-
-colors = [
-    "steelblue" if i < k else "lightgray"
-    for i in range(len(sorted_eigenvalues))
-]
-
-axes[0].bar(
-    component_names,
-    sorted_eigenvalues,
-    color=colors
+classes = pd.read_csv(
+    class_file,
+    sep="\t",
+    header=None
 )
 
-axes[0].set_title("Scree Plot")
-axes[0].set_xlabel("Principal Components")
-axes[0].set_ylabel("Eigenvalues")
+classes.columns = ["class"]
+
+print("\nClass shape:")
+print(classes.shape)
+
+expr = pd.read_csv(
+    expr_file,
+    sep="\t"
+)
+
+print("\nExpression matrix shape:")
+print(expr.shape)
+
+print("\nFirst few columns:")
+print(expr.columns[:10])
+
+print("\nData types:")
+print(expr.dtypes.head())
+
+cols = pd.read_csv(
+    columns_file,
+    sep="\t",
+    comment="#"
+)
+
+print("\nColumns mapping shape:")
+print(cols.shape)
 
 
-# Display values on bars
-for i in range(len(sorted_eigenvalues)):
+xbp1_rows = cols[
+    cols["GeneSymbol"].astype(str).str.upper() == "XBP1"
+]
 
-    value = sorted_eigenvalues[i]
+print("\nXBP1 rows:")
+print(xbp1_rows)
 
-    axes[0].text(
-        i,
-        value + 0.01,
-        f"{value:.2f}",
-        ha="center"
-    )
+XBP1_ID = int(xbp1_rows.iloc[0]["ID"])
 
+print("\nXBP1 ID:")
+print(XBP1_ID)
 
-# PCA Scatter Plot
-if k >= 2:
+gata3_rows = cols[
+    cols["GeneSymbol"].astype(str).str.upper() == "GATA3"
+]
 
-    axes[1].scatter(
-        reduced_data[:, 0],
-        reduced_data[:, 1],
-        alpha=0.7
-    )
+print("\nGATA3 rows:")
+print(gata3_rows)
 
-    axes[1].set_xlabel(
-        f"PC1 ({variance_explained[0]:.1f}%)"
-    )
+GATA3_ID = int(gata3_rows.iloc[0]["ID"])
 
-    axes[1].set_ylabel(
-        f"PC2 ({variance_explained[1]:.1f}%)"
-    )
+print("\nGATA3 ID:")
+print(GATA3_ID)
 
-    axes[1].set_title("PCA Projection")
+expr.columns = expr.columns.astype(int)
 
+xbp1 = expr[XBP1_ID]
+gata3 = expr[GATA3_ID]
 
-plt.tight_layout()
+print("\nXBP1 expression:")
+print(xbp1.head())
+
+print("\nGATA3 expression:")
+print(gata3.head())
+
+colors = classes["class"].map({
+    0: "black",
+    1: "red"
+})
+
+plt.figure(figsize=(7,7))
+
+plt.scatter(
+    gata3,
+    xbp1,
+    c=colors,
+    s=35
+)
+
+plt.xlabel("GATA3", fontsize=14)
+plt.ylabel("XBP1", fontsize=14)
+
+plt.title("Figure 1a Style Plot")
+
+plt.grid(True)
+
 plt.show()
+
+# Keep only numeric columns
+expr_numeric = expr.select_dtypes(include=[np.number])
+
+print("\nNumeric matrix shape:")
+print(expr_numeric.shape)
+
+X = expr_numeric.values
+
+# IMPORTANT:
+# Rows = samples
+# Columns = genes
+
+print("\nPCA matrix shape:")
+print(X.shape)
+
+# Very common for gene expression PCA
+
+scaler = StandardScaler(with_std=False)
+
+X_scaled = scaler.fit_transform(X)
+
+pca = PCA(n_components=2)
+
+pcs = pca.fit_transform(X_scaled)
+
+pc1 = pcs[:,0]
+pc2 = pcs[:,1]
+
+print("\nExplained variance ratio:")
+print(pca.explained_variance_ratio_)
+
+plt.figure(figsize=(10,4))
+
+# ALL samples
+plt.scatter(
+    pc1,
+    np.ones_like(pc1) * 2,
+    c=colors,
+    s=25
+)
+
+# ER-
+er_minus = classes["class"] == 0
+
+plt.scatter(
+    pc1[er_minus],
+    np.ones(sum(er_minus)) * 1,
+    c="black",
+    s=25
+)
+
+# ER+
+er_plus = classes["class"] == 1
+
+plt.scatter(
+    pc1[er_plus],
+    np.ones(sum(er_plus)) * 0,
+    c="red",
+    s=25
+)
+
+plt.yticks(
+    [2,1,0],
+    ["All", "ER-", "ER+"]
+)
+
+plt.xlabel("Projection onto PC1")
+
+plt.title("Figure 1c Style Plot")
+
+plt.grid(True)
+
+plt.show()
+
+plt.figure(figsize=(7,7))
+
+plt.scatter(
+    pc1,
+    pc2,
+    c=colors,
+    s=35
+)
+
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+
+plt.title("PCA Scatter Plot")
+
+plt.grid(True)
+
+plt.show()
+
+pca_df = pd.DataFrame({
+    "PC1": pc1,
+    "PC2": pc2,
+    "Class": classes["class"]
+})
+
+pca_df.to_csv(
+    "pca_results.tsv",
+    sep="\t",
+    index=False
+)
+
+print("\nSaved PCA results to pca_results.tsv")
+
+print("\nAssignment completed successfully.")
